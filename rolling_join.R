@@ -60,11 +60,11 @@ dupez_by_loopz2 <- function(x){
 #' @examples
 #'
 #' # Make mock data
-#' predoc <- data.frame(ID = c(100:299,999, 888), Type = rep(c("Ins", "DA"), times = 101), Type2 = "Foo", Predoc_ID = c(0:99, sample(100:299, 100), 888, 999))
-#' inc <- data.frame(ID = c(0:99, 888, 999))
-#'
-#' # Run Function
-#' rolling_join(x = inc, y = predoc, by.x = "ID", pre.y = "Predoc_ID", post.y = "ID", j_max = Inf, remove_loops = T) %>% head(20)
+# predoc <- data.frame(ID = c(100:299,999, 888), Type = rep(c("Ins", "DA"), times = 101), Type2 = "Foo", Predoc_ID = c(0:99, sample(100:299, 100), 888, 999))
+# inc <- data.frame(ID = c(0:99, 888, 999))
+# 
+# # Run Function
+# rolling_join(x = inc, y = predoc, by.x = "ID", pre.y = "Predoc_ID", post.y = "ID", j_max = Inf, remove_loops = T) %>% head(20)
 
 rolling_join <- function(x, y, by.x, pre.y, post.y, id.name = "ID", j_max = Inf, remove_loops = TRUE, quiet = F, return_dt = FALSE) {
   
@@ -103,7 +103,9 @@ rolling_join <- function(x, y, by.x, pre.y, post.y, id.name = "ID", j_max = Inf,
     rolling_id_add_column <- colnames(y)[which(hard.y == post.y)] %>% unique()
     other_cols <- colnames(y)[which(colnames(y) %ni% c(rolling_id_column, rolling_id_add_column))]
     
+    if(length(other_cols) > 0) {
     data.table::setnames(y, other_cols, fun.rename)
+    }
     data.table::setnames(y, rolling_id_column, rolling_id)
     suppressWarnings(data.table::setnames(y, rolling_id_add_column, rolling_id_add))
     # y <- dplyr::rename_at(tibble::as_tibble(y), dplyr::vars(colnames(y)[which(colnames(y) %ni% c(rolling_id, rolling_id_add))]), fun.rename)

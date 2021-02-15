@@ -7,133 +7,88 @@ library(leaflet)
 library(leaflet.extras)
 library(leafem)
 library(data.table)
+if(!("VicmapR" %in% installed.packages())) {
+  remotes::install_github("JustinCally/VicmapR")
+}
+library("VicmapR")
 crs <- 4283
 source('rolling_join.R')
+options(vicmap.base_url = "http://geofabric.bom.gov.au/simplefeatures/ahgf_shcatch/wfs")
+# options(vicmap.max_geom_pred_size = 3000)
 
-#### Get geofabric and catchment data ####
+layers <- listLayers()
 
-# Specify raw file path 
-# raw_data_path <- "C:/Users/callyj/OneDrive - Environment Protection Authority Victoria/WORK/repositories/blog_code/j-cally-code/_posts/2020-01-22-air-filters-in-schools/data-raw/stream_attributes_v1.1.gdb"
-
-# You can loop in all layers
-# geofabric <- lapply(as.list(geo_fabric_layers$name) , function(x) {
-#   sf::st_read(raw_data_path, x) 
-# })
-
-# Save as intermediate file because it takes a long time to read in 
-
-# Easier just to load in the terrain layer
-geofabric_terrain_rds <- paste0(getwd(), "/intermediate_data/geofabric_terrain.rds")
-if(!file.exists(geofabric_terrain_rds)){
-  geofabric_terrain <- sf::st_read(raw_data_path, layer = "terrain_lut")
-  saveRDS(geofabric_terrain, file = geofabric_terrain_rds)
-} else {
-  geofabric_terrain <- readRDS(geofabric_terrain_rds)
-}
-
-catchments_rds <- paste0(getwd(), "/intermediate_data/catchments.rds")
-
-if(!file.exists(catchments_rds)){
-  catchments <- dplyr::tbl(con, "ahgfcatchment") %>% 
-    dplyr::mutate(geom = st_astext(geom)) %>% 
-    dplyr::collect() %>% 
-    sf::st_as_sf(wkt = "geom", crs = crs)
+melbourne <- sf::st_read(system.file("shapes/melbourne.geojson", package="VicmapR"), quiet = T)
+sample_point <- melbourne %>% st_centroid()
+melb_bbox <- st_buffer(sample_point %>% st_transform(3111), 50000) %>% st_transform(4283)
   
-  saveRDS(object = catchments, file = catchments_rds)
-} else {
-  catchments <- readRDS(catchments_rds)
-}
+catchment_sample <- vicmap_query("ahgf_shcatch:AHGFCatchment") %>% 
+  filter(INTERSECTS(melb_bbox)) %>%
+  collect()
 
-#### Get schools data ####
-# Read in schools 
-schools <- dbGetQuery(con, "SELECT *, ST_AsText(geom) as geometry FROM schools;") %>%
-  select(-geom) %>%
-  st_as_sf(wkt = "geometry", crs = 4283) %>% 
-  mutate(UNIQUEID = 1:nrow(.)) %>% 
-  filter(education_sector == "Government") %>%
-  head(50) #select only 50 schools
+# options(vicmap.base_url = "http://geofabric.bom.gov.au/simplefeatures/ahgf_shcarto/wfs")
 
-#### Find catchments near schools ####
+catchment_exact <- vicmap_query("ahgf_shcatch:AHGFCatchment") %>% 
+  filter(INTERSECTS(sample_point)) %>%
+  collect()
 
-# Add stream details for each catchment section 
-catchment_with_geofabric <- catchments %>% left_join(geofabric_terrain, by = c("segmentno" = "SEGMENTNO"))
-
-#Schools to catchment
-catchments_near_schools <- catchment_with_geofabric %>% 
-  sf::st_join(schools) %>% 
-  filter(!is.na(UNIQUEID))
-
-#### Join the data through a while loop ####
-
-catchment_start <- catchments_near_schools %>% 
+catchment_start <- catchment_exact %>% 
   sf::st_drop_geometry() %>%
-  select(UNIQUEID,
-         hydroid)
-
-catchment_lookup <- catchments %>% 
+  select(UNIQUEID = id, 
+         hydroid) %>%
+  unique() 
+  
+catchment_lookup <- catchment_sample %>% 
   sf::st_drop_geometry() %>%
   select(hydroid,
          nextdownid) %>% 
-  filter(!is.na(nextdownid))
+  filter(!is.na(nextdownid)) %>%
+  unique()
 
 # Note you can add an argument j_max to limit the number of catchments upstream (e.g. only select 10)
 
-rolling_catchments_1 <- SOC::rolling_join(x = catchment_start , 
+rolling_catchments_1 <- rolling_join(x = catchment_start , 
                                           y = catchment_lookup, 
                                           by.x = "hydroid",
                                           pre.y = "nextdownid",
                                           post.y = "hydroid", 
-                                          id.name = "HYDROID_ID", 
+                                          id.name = "HYDROIDID",
                                           j_max = 10, 
                                           remove_loops = T) #Function that continually joins data until exhausted
 
 # Make into a long format
 rolling_catchments_long <- data.table::melt.data.table(as.data.table(rolling_catchments_1), 
-                                                       id.vars = 'UNIQUEID', value.name = "hydroid") %>% unique() %>% na.omit()
+                                                       id.vars = 'UNIQUEID', 
+                                                       value.name = "hydroid") %>% unique() %>% na.omit()
 
 # Select cols
-rolling_catchments_geo <- left_join(rolling_catchments_long, catchment_with_geofabric %>%
-                                      select(hydroid, CATRELIEF, CONFINEMENT, CATSLOPE, CATSTORAGE)) %>%
+rolling_catchments_geo <- left_join(rolling_catchments_long, catchment_sample %>%
+                                      select(hydroid, shape_area)) %>% 
   st_as_sf()
 
+#### Landuese data ####
+
+catchments_union <- st_union(rolling_catchments_geo)
+
+options(vicmap.base_url = "https://data.gov.au/geoserver/catchment-scale-land-use-of-australia-update-2017/wfs")
+
+land_use_layers <- listLayers()
+
+land_use <- vicmap_query("pb_clsucd9aal20190319:ckan_761be45d_59ec_4338_b933_38b4051801b0") %>%
+  filter(BBOX(st_bbox(catchments_union))) %>%
+  collect()
+
+library(ows4R)
+
+nc <- ows4R::WFSClient$new("https://data.gov.au/geoserver/catchment-scale-land-use-of-australia-update-2017/wfs", serviceVersion = "1.1.0")
+
+nc$getCapabilities()
 
 #### Plot Map ####
 
-# Format map data
-schools_data_map <- sf::st_transform(schools, crs) %>% 
-  left_join(catchments_near_schools %>% 
-              st_drop_geometry() %>% 
-              select(UNIQUEID, 
-                     CATSTORAGE)) %>%
-  mutate(school_label = paste0(school_name, " (", school_type, ")"))
-
-catchments_near_schools_sp <- as_Spatial(rolling_catchments_geo)
-
-#Define Polygon palette
 pal <- colorNumeric(
-  palette = "Reds", reverse = F,
-  domain = catchments_near_schools$CATSTORAGE)
-
-# Define Marker colour
-getColor <- function(df) {
-  sapply(df$CATSTORAGE, function(CATSTORAGE) {
-    if(is.na(CATSTORAGE)) {
-      "gray"
-    } else if(CATSTORAGE < 33) {
-      "green"
-    } else if(CATSTORAGE < 66) {
-      "orange"
-    } else {
-      "red"
-    } })
-}
-
-icons <- leaflet::awesomeIcons(
-  icon = 'bonfire',
-  iconColor = 'white',
-  library = 'ion',
-  markerColor = getColor(schools_data_map)
-)
+  palette = "Blues",
+  domain = rolling_catchments_geo$shape_area)
 
 basemap <- leaflet() %>%
   addProviderTiles("CartoDB.Positron", group = 'Default') %>%
@@ -144,26 +99,16 @@ basemap <- leaflet() %>%
   addFullscreenControl()
 
 basemap %>% 
-  leaflet::addPolygons(data = catchments_near_schools_sp, 
-                       fillColor = ~pal(CATSTORAGE), 
+  leaflet::addPolygons(data = rolling_catchments_geo, 
+                       fillColor = ~pal(shape_area), 
                        color = "black", 
-                       weight = 0.2, 
-                       opacity = 1, 
+                       weight = 0.8, 
+                       fillOpacity = 0.7, 
                        group = "catchment", 
-                       label = ~CATSTORAGE) %>%
-  leaflet::addAwesomeMarkers(data = schools_data_map, 
-                             icon = icons,
-                             group = "schools", 
-                             label = ~school_label) %>%
-  addLegend("bottomright", 
-            pal = pal, 
-            values = ~CATSTORAGE, 
-            data = catchments_near_schools_sp, 
-            title = "% Valley Bottoms", 
-            labFormat = labelFormat(digits = 2),
-            opacity = 1) %>%
+                       label = ~hydroid) %>%
+  leaflet::addMarkers(data = sample_point) %>%
   addLayersControl( 
     baseGroups = c("Default", "Terrain"),
-    overlayGroups = c("catchment", "schools"),
+    overlayGroups = c("catchment"),
     options = layersControlOptions(collapsed = FALSE)
   )  
