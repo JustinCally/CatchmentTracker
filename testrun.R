@@ -68,19 +68,35 @@ rolling_catchments_geo <- left_join(rolling_catchments_long, catchment_sample %>
 
 #### Landuese data ####
 
-catchments_union <- st_union(rolling_catchments_geo)
+# catchments_union <- st_union(rolling_catchments_geo)
+# 
+# options(vicmap.base_url = "https://geoserver.tern.org.au/geoserver/ows")
+# 
+# 
+# land_use <- vicmap_query("pb_clsucd9aal20190319:ckan_761be45d_59ec_4338_b933_38b4051801b0") %>%
+#   # filter(BBOX(st_bbox(catchments_union))) %>%
+#   collect()
 
-options(vicmap.base_url = "https://data.gov.au/geoserver/catchment-scale-land-use-of-australia-update-2017/wfs")
+library(raster)
+library(sp)
 
-land_use_layers <- listLayers()
+crs_wgs84utm11 <- sp::CRS(SRS_string = "+init=epsg:4326")
 
-land_use <- vicmap_query("pb_clsucd9aal20190319:ckan_761be45d_59ec_4338_b933_38b4051801b0") %>%
-  filter(BBOX(st_bbox(catchments_union))) %>%
-  collect()
+bbox <- st_bbox(melbourne %>% st_transform(3111)) %>% unname() %>% round()
 
-library(ows4R)
+raster <- raster::raster(x = paste0("https://geoserver.tern.org.au/geoserver/abares/wms?",
+                                    "service=WMS&version=1.1.0",
+                                    "&request=GetMap&layers=abares%3Aclum_50m_2018", 
+                                    "&bbox=", 
+                                    bbox[1], "%2C", bbox[2], "%2C", bbox[3], "%2C", bbox[4], 
+                                    "&width=768&height=734&srs=EPSG%3A3111&format=image%2Fgeotiff")) 
 
-nc <- ows4R::WFSClient$new("https://data.gov.au/geoserver/catchment-scale-land-use-of-australia-update-2017/wfs", serviceVersion = "1.1.0")
+
+melbourne_sp <- as_Spatial(melbourne)
+
+raster::extract(raster, melbourne  %>% st_transform(crs_wgs84utm11))
+
+nc <- ows4R::WFSClient$new("https://geoserver.tern.org.au/geoserver/abares/wfs/clum_50m_2018", serviceVersion = "1.1.0")
 
 nc$getCapabilities()
 
