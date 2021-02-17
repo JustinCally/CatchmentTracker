@@ -7,6 +7,7 @@ library(leaflet)
 library(leaflet.extras)
 library(leafem)
 library(data.table)
+library(raster)
 if(!("VicmapR" %in% installed.packages())) {
   remotes::install_github("JustinCally/VicmapR")
 }
@@ -68,37 +69,32 @@ rolling_catchments_geo <- left_join(rolling_catchments_long, catchment_sample %>
 
 #### Landuese data ####
 
-# catchments_union <- st_union(rolling_catchments_geo)
-# 
-# options(vicmap.base_url = "https://geoserver.tern.org.au/geoserver/ows")
-# 
-# 
-# land_use <- vicmap_query("pb_clsucd9aal20190319:ckan_761be45d_59ec_4338_b933_38b4051801b0") %>%
-#   # filter(BBOX(st_bbox(catchments_union))) %>%
-#   collect()
 
-library(raster)
-library(sp)
+bbox <- st_bbox(melbourne %>% st_transform(3577)) %>% unname() %>% round()
 
-crs_wgs84utm11 <- sp::CRS(SRS_string = "+init=epsg:4326")
-
-bbox <- st_bbox(melbourne %>% st_transform(3111)) %>% unname() %>% round()
-
-raster <- raster::raster(x = paste0("https://geoserver.tern.org.au/geoserver/abares/wms?",
-                                    "service=WMS&version=1.1.0",
-                                    "&request=GetMap&layers=abares%3Aclum_50m_2018", 
+raster <- raster::stack(x = paste0("/vsicurl/https://geoserver.tern.org.au/geoserver/abares/ows?",
+                                    "service=WCS&version=1.0.0",
+                                    "&request=GetCoverage&sourceCoverage=abares%3Aclum_50m_2018", 
                                     "&bbox=", 
                                     bbox[1], "%2C", bbox[2], "%2C", bbox[3], "%2C", bbox[4], 
-                                    "&width=768&height=734&srs=EPSG%3A3111&format=image%2Fgeotiff")) 
+                                    "&width=768&height=734&CRS=EPSG%3A3577&format=image%2Fgeotiff")) 
 
+ex <- raster::extract(raster, melbourne)[[1]]
 
-melbourne_sp <- as_Spatial(melbourne)
+land_use_lookup <- readRDS("land_use_lookup.rds")
 
-raster::extract(raster, melbourne  %>% st_transform(crs_wgs84utm11))
+table_data <- ex %>% 
+  table() %>%
+  t() %>% 
+  as.data.frame(., stringsAsFactors = F) 
 
-nc <- ows4R::WFSClient$new("https://geoserver.tern.org.au/geoserver/abares/wfs/clum_50m_2018", serviceVersion = "1.1.0")
+joined_data <- table_data %>%
+  dplyr::select(ID = 2, 3) %>%
+  dplyr::mutate(ID = as.integer(ID), 
+                Frac = Freq/sum(.$Freq, na.rm = T)) %>% 
+  dplyr::left_join(land_use_lookup, by = "ID") %>% 
+  dplyr::arrange(desc(Frac))
 
-nc$getCapabilities()
 
 #### Plot Map ####
 
