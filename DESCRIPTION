@@ -1,0 +1,29 @@
+Package: CatchmentTracker
+Title: From a Given Point, Track Upstream Catchments and Obtain Their Landuse
+Version: 0.0.0.9000
+Authors@R: 
+    person(given = "Justin",
+           family = "Cally",
+           role = c("aut", "cre"),
+           email = "justin.g.cally@gmail.com",
+           comment = c(ORCID = "0000-0003-4584-2220"))
+Description: 
+    A lightweight package that uses geofabric data (source: BOM) and landuse data (source: TERN) 
+    to generate summaries of the overlapping landuse within the catchment and upstream catchments.
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.1.0
+Depends: 
+    R (>= 2.10)
+Imports: 
+    raster (>= 3.1.5),
+    dplyr,
+    sf (>= 0.9.8),
+    VicmapR (>= 0.1.0),
+    data.table,
+    purrr,
+    magrittr
+Remotes: 
+    JustinCally/VicmapR
