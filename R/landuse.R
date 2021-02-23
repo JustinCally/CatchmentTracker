@@ -25,7 +25,7 @@ raster <- raster::raster(x = paste0("/vsicurl/https://geoserver.tern.org.au/geos
 
 ex <- raster::extract(raster, catchment_sf, ...)[[1]]
 
-land_use_lookup <- readRDS("land_use_lookup.rds")
+data("land_use_lookup", envir = environment(), package = "CatchmentTracker")
 
 table_data <- ex %>%
   table() %>%

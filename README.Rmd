@@ -35,7 +35,7 @@ devtools::install_github("JustinCally/CatchmentTracker")
 
 This is a basic example which shows you how to solve a common problem:
 
-```{r example, eval=FALSE}
+```{r example, warning = FALSE}
 library(CatchmentTracker)
 ## basic example code
 
