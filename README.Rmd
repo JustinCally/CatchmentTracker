@@ -29,7 +29,7 @@ Tthe development version from [GitHub](https://github.com/) with:
 
 ``` r
 # install.packages("devtools")
-devtools::install_github("JustinCally/CatchmentTracker")
+devtools::install_github("JustinCally/CatchmentTracker", ref = 'master')
 ```
 ## Example
 
@@ -39,8 +39,8 @@ This is a basic example which shows you how to solve a common problem:
 library(CatchmentTracker)
 ## basic example code
 
-latitude <- -37.25
-longitude <- 145.15
+latitude <- -37.8107306254817
+longitude <- 144.943636530752
 
 df <- data.frame(long = longitude, lat = latitude)
 
@@ -51,5 +51,5 @@ catchments <- track_catchments(point = point)
 landuse_df <- landuse_extract(catchments)
 
 knitr::kable(landuse_df)
-
 ```
+
