@@ -17,7 +17,7 @@ track_catchments <- function(point) {
     i <- i + 1
 
     if(i == 1) {
-      catch_upstream[[i]] <- VicmapR::vicmap_query("ahgf_shcatch:AHGFCatchment") %>%
+      catch_upstream[[i]] <- VicmapR::vicmap_query("ahgf_shcatch:AHGFCatchment", wfs_version = "1.1.0") %>%
         VicmapR::filter(VicmapR::INTERSECTS(point)) %>%
         VicmapR::collect() %>%
         dplyr::mutate(nth_upstream = i)
@@ -25,14 +25,14 @@ track_catchments <- function(point) {
       hydroid_val <- catch_upstream[[i]]$hydroid %>% unique()
     } else {
 
-      hits <- VicmapR::vicmap_query("ahgf_shcatch:AHGFCatchment") %>%
+      hits <- VicmapR::vicmap_query("ahgf_shcatch:AHGFCatchment", wfs_version = "1.1.0") %>%
         VicmapR::filter(nextdownid %in% hydroid_val) %>%
         VicmapR::feature_hits()
 
       if(hits == 0 | is.na(hits) | is.null(hits)) {
         ret_row <- FALSE
       } else {
-        catch_upstream[[i]] <- VicmapR::vicmap_query("ahgf_shcatch:AHGFCatchment") %>%
+        catch_upstream[[i]] <- VicmapR::vicmap_query("ahgf_shcatch:AHGFCatchment", wfs_version = "1.1.0") %>%
           VicmapR::filter(nextdownid %in% hydroid_val) %>%
           VicmapR::collect() %>%
           dplyr::mutate(nth_upstream = i)
